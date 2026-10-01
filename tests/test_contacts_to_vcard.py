@@ -3,8 +3,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from table_of_contacts_to_vcard import (
+    DEFAULT_CSV_PARSER_SETTINGS,
     ParentContact,
+    load_csv_parser_settings,
     normalize_phone,
     parse_contacts,
     render_vcard,
@@ -13,21 +17,21 @@ from table_of_contacts_to_vcard import (
 
 
 HEADER = [
-    "Vorname Kind",
-    "Nachname Kind",
-    "Geburtstag",
-    "Strasse",
-    "PLZ",
-    "Ort",
-    "Festnetz",
-    "Vorname Mutter",
-    "Nachname Mutter",
-    "Vorname Vater",
-    "Nachname Vater",
-    "Mobil Mutter",
-    "Mobil Vater",
-    "Email Mutter",
-    "Email Vater",
+    DEFAULT_CSV_PARSER_SETTINGS.child_first_name,
+    DEFAULT_CSV_PARSER_SETTINGS.child_last_name,
+    DEFAULT_CSV_PARSER_SETTINGS.birthday,
+    DEFAULT_CSV_PARSER_SETTINGS.street,
+    DEFAULT_CSV_PARSER_SETTINGS.postal_code,
+    DEFAULT_CSV_PARSER_SETTINGS.city,
+    DEFAULT_CSV_PARSER_SETTINGS.home_phone,
+    DEFAULT_CSV_PARSER_SETTINGS.mother_first_name,
+    DEFAULT_CSV_PARSER_SETTINGS.mother_last_name,
+    DEFAULT_CSV_PARSER_SETTINGS.father_first_name,
+    DEFAULT_CSV_PARSER_SETTINGS.father_last_name,
+    DEFAULT_CSV_PARSER_SETTINGS.mother_mobile,
+    DEFAULT_CSV_PARSER_SETTINGS.father_mobile,
+    DEFAULT_CSV_PARSER_SETTINGS.mother_email,
+    DEFAULT_CSV_PARSER_SETTINGS.father_email,
 ]
 
 
@@ -41,21 +45,21 @@ def write_table(path: Path, children: list[list[str]]) -> None:
 
 def child_row(name: str, **overrides: str) -> list[str]:
     values = {
-        "Vorname Kind": name,
-        "Nachname Kind": "Example",
-        "Geburtstag": "",
-        "Strasse": "Musterstraße 1",
-        "PLZ": "12345",
-        "Ort": "Musterstadt",
-        "Festnetz": "030/12345678",
-        "Vorname Mutter": "Erika",
-        "Nachname Mutter": "Mustermann",
-        "Vorname Vater": "Max",
-        "Nachname Vater": "Mustermann",
-        "Mobil Mutter": "0176/12345678",
-        "Mobil Vater": "0151/23456789",
-        "Email Mutter": "erika@example.com",
-        "Email Vater": "max@example.com",
+        DEFAULT_CSV_PARSER_SETTINGS.child_first_name: name,
+        DEFAULT_CSV_PARSER_SETTINGS.child_last_name: "Example",
+        DEFAULT_CSV_PARSER_SETTINGS.birthday: "",
+        DEFAULT_CSV_PARSER_SETTINGS.street: "Musterstraße 1",
+        DEFAULT_CSV_PARSER_SETTINGS.postal_code: "12345",
+        DEFAULT_CSV_PARSER_SETTINGS.city: "Musterstadt",
+        DEFAULT_CSV_PARSER_SETTINGS.home_phone: "030/12345678",
+        DEFAULT_CSV_PARSER_SETTINGS.mother_first_name: "Erika",
+        DEFAULT_CSV_PARSER_SETTINGS.mother_last_name: "Mustermann",
+        DEFAULT_CSV_PARSER_SETTINGS.father_first_name: "Max",
+        DEFAULT_CSV_PARSER_SETTINGS.father_last_name: "Mustermann",
+        DEFAULT_CSV_PARSER_SETTINGS.mother_mobile: "0176/12345678",
+        DEFAULT_CSV_PARSER_SETTINGS.father_mobile: "0151/23456789",
+        DEFAULT_CSV_PARSER_SETTINGS.mother_email: "erika@example.com",
+        DEFAULT_CSV_PARSER_SETTINGS.father_email: "max@example.com",
     }
     values.update(overrides)
     return [values[column] for column in HEADER]
@@ -69,8 +73,8 @@ def test_parses_single_csv_row_and_maps_parent_fields(tmp_path: Path) -> None:
             child_row(
                 "Kind Eins",
                 **{
-                    "Vorname Mutter": "Erika",
-                    "Nachname Mutter": "Mustermann",
+                    DEFAULT_CSV_PARSER_SETTINGS.mother_first_name: "Erika",
+                    DEFAULT_CSV_PARSER_SETTINGS.mother_last_name: "Mustermann",
                 },
             )
         ],
@@ -141,6 +145,103 @@ def test_sample_csv_generates_expected_single_vcard_file(tmp_path: Path) -> None
     assert output.read_text(encoding="utf-8").count("BEGIN:VCARD") == 2
 
 
+def test_english_csv_parser_settings(tmp_path: Path) -> None:
+    settings_path = (
+        Path(__file__).parents[1]
+        / "src"
+        / "table_of_contacts_to_vcard"
+        / "csv_parser_settings_en.toml"
+    )
+    settings = load_csv_parser_settings(settings_path)
+    table = tmp_path / "english-contacts.csv"
+    sample_values = {
+        "child_first_name": "Child One",
+        "street": "Sample Street 1",
+        "postal_code": "12345",
+        "city": "Sampletown",
+        "home_phone": "030/12345678",
+        "mother_first_name": "Erika",
+        "mother_last_name": "Mustermann",
+        "mother_mobile": "0176/12345678",
+        "mother_email": "erika@example.com",
+    }
+    with table.open("w", encoding="utf-8", newline="") as file:
+        file.write("Fictional sample data\n")
+        writer = csv.writer(file)
+        writer.writerow(vars(settings).values())
+        writer.writerow(
+            [sample_values.get(name, "") for name in vars(settings)]
+        )
+
+    contacts = parse_contacts(table, csv_parser_settings=settings)
+    mother = next(contact for contact in contacts if contact.role == "Mama")
+
+    assert mother.middle_name == "Mama von Child One"
+    assert mother.phones == [
+        ("CELL", "+4917612345678"),
+        ("HOME", "+493012345678"),
+    ]
+    output = tmp_path / "english-contacts.vcf"
+    repository = Path(__file__).parents[1]
+    subprocess.run(
+        [
+            sys.executable,
+            str(repository / "src" / "table_of_contacts_to_vcard" / "__init__.py"),
+            "--input-table",
+            str(table),
+            "--output",
+            str(output),
+            "--single-file",
+            "--csv-parser-settings",
+            str(settings_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "N:Mustermann;Erika;Mama von Child One;;" in output.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_missing_csv_parser_settings_falls_back_to_default_columns(
+    tmp_path: Path,
+) -> None:
+    settings = load_csv_parser_settings(tmp_path / "missing-settings.toml")
+    assert settings == DEFAULT_CSV_PARSER_SETTINGS
+
+
+def test_csv_parser_settings_requires_column_names_table(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings-without-table.toml"
+    settings_path.write_text(
+        'father_first_name = "Father first name"\n', encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match=r"must contain a \[column_names\] table"):
+        load_csv_parser_settings(settings_path)
+
+
+def test_csv_header_error_lists_expected_provided_and_delta(tmp_path: Path) -> None:
+    table = tmp_path / "wrong-columns.csv"
+    with table.open("w", encoding="utf-8", newline="") as file:
+        file.write("Introductory line to skip\n")
+        writer = csv.writer(file)
+        writer.writerow([*HEADER[:-1], "Unexpected column"])
+
+    with pytest.raises(ValueError) as error:
+        parse_contacts(table)
+
+    message = str(error.value)
+    assert f"Expected columns: {', '.join(HEADER)}" in message
+    assert (
+        f"Provided columns: {', '.join([*HEADER[:-1], 'Unexpected column'])}"
+        in message
+    )
+    assert "Missing columns: Email Vater" in message
+    assert "Unexpected columns: Unexpected column" in message
+    assert "--csv-parser-settings" in message
+
+
 def test_omits_parent_without_parent_data(tmp_path: Path) -> None:
     table = tmp_path / "empty-parents.csv"
     write_table(
@@ -149,14 +250,14 @@ def test_omits_parent_without_parent_data(tmp_path: Path) -> None:
             child_row(
                 "Kind Eins",
                 **{
-                    "Vorname Mutter": "",
-                    "Nachname Mutter": "",
-                    "Vorname Vater": "",
-                    "Nachname Vater": "",
-                    "Mobil Mutter": "[ – ]",
-                    "Mobil Vater": "[ – ]",
-                    "Email Mutter": "?",
-                    "Email Vater": "[ – ]",
+                    DEFAULT_CSV_PARSER_SETTINGS.mother_first_name: "",
+                    DEFAULT_CSV_PARSER_SETTINGS.mother_last_name: "",
+                    DEFAULT_CSV_PARSER_SETTINGS.father_first_name: "",
+                    DEFAULT_CSV_PARSER_SETTINGS.father_last_name: "",
+                    DEFAULT_CSV_PARSER_SETTINGS.mother_mobile: "[ – ]",
+                    DEFAULT_CSV_PARSER_SETTINGS.father_mobile: "[ – ]",
+                    DEFAULT_CSV_PARSER_SETTINGS.mother_email: "?",
+                    DEFAULT_CSV_PARSER_SETTINGS.father_email: "[ – ]",
                 },
             )
         ],

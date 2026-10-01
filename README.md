@@ -14,6 +14,16 @@ The first CSV line is skipped by default; line 2 is used as the header.
 Change or extend the skipped 1-based line numbers with `--skip-csv-lines`, for example `--skip-csv-lines 1 3`.
 German national telephone numbers are converted to international `+49` format.
 
+CSV header names are configured in the package's
+`csv_parser_settings_de.toml`. This file is used by default and maps each
+contact field (for example, `father_first_name`) to its CSV column name under
+the `[column_names]` table.
+Pass `--csv-parser-settings PATH` to use another mapping. An English mapping
+is included in `csv_parser_settings_en.toml`; pass its path to parse a CSV
+with English column headers. Both TOML files are included in the installed
+package and wheel. If the settings file cannot be found, the converter falls
+back to the built-in German column names.
+
 The fictional example input and its generated output are available in
 [`tests/fixtures/sample_contacts.csv`](tests/fixtures/sample_contacts.csv) and
 [`tests/fixtures/sample_contacts.vcf`](tests/fixtures/sample_contacts.vcf).
@@ -53,6 +63,17 @@ Kopfzeile verwendet. Mit `--skip-csv-lines` lassen sich weitere oder andere
 Zeilen anhand ihrer 1-basierten Zeilennummer überspringen, zum Beispiel
 `--skip-csv-lines 1 3`. Deutsche Telefonnummern werden in das internationale
 Format mit dem Präfix `+49` umgewandelt.
+
+Die CSV-Spaltennamen werden in der mitgelieferten Datei
+`csv_parser_settings_de.toml` konfiguriert. Sie wird standardmäßig verwendet und
+ordnet jedem Kontaktfeld (zum Beispiel `father_first_name`) den jeweiligen
+Spaltennamen unterhalb der Tabelle `[column_names]` zu. Mit
+`--csv-parser-settings PFAD` kann eine andere Zuordnung
+angegeben werden. Eine englische Zuordnung ist in
+`csv_parser_settings_en.toml` enthalten; damit lassen sich CSV-Dateien mit
+englischen Spaltenüberschriften einlesen. Beide TOML-Dateien sind im
+installierten Paket und Wheel enthalten. Wird die Einstellungsdatei nicht
+gefunden, verwendet der Konverter die fest eingebauten deutschen Spaltennamen.
 
 Eine Beispieldatei mit fiktiven Daten und die dazugehörige vCard-Ausgabe stehen
 in [`tests/fixtures/sample_contacts.csv`](tests/fixtures/sample_contacts.csv)

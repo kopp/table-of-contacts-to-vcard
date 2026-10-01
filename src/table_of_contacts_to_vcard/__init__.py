@@ -2,9 +2,88 @@ import argparse
 import csv
 import io
 import re
+import tomllib
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+@dataclass(frozen=True)
+class CSVParserSettings:
+    child_first_name: str
+    child_last_name: str
+    birthday: str
+    street: str
+    postal_code: str
+    city: str
+    home_phone: str
+    mother_first_name: str
+    mother_last_name: str
+    father_first_name: str
+    father_last_name: str
+    mother_mobile: str
+    father_mobile: str
+    mother_email: str
+    father_email: str
+
+
+DEFAULT_CSV_PARSER_SETTINGS = CSVParserSettings(
+    child_first_name="Vorname Kind",
+    child_last_name="Nachname Kind",
+    birthday="Geburtstag",
+    street="Strasse",
+    postal_code="PLZ",
+    city="Ort",
+    home_phone="Festnetz",
+    mother_first_name="Vorname Mutter",
+    mother_last_name="Nachname Mutter",
+    father_first_name="Vorname Vater",
+    father_last_name="Nachname Vater",
+    mother_mobile="Mobil Mutter",
+    father_mobile="Mobil Vater",
+    mother_email="Email Mutter",
+    father_email="Email Vater",
+)
+DEFAULT_CSV_PARSER_SETTINGS_PATH = Path(__file__).with_name(
+    "csv_parser_settings_de.toml"
+)
+
+
+def load_csv_parser_settings(
+    settings_file: str | Path | None = None,
+) -> CSVParserSettings:
+    path = Path(settings_file) if settings_file is not None else DEFAULT_CSV_PARSER_SETTINGS_PATH
+    try:
+        with path.open("rb") as file:
+            settings = tomllib.load(file)
+    except FileNotFoundError:
+        return DEFAULT_CSV_PARSER_SETTINGS
+
+    column_names = settings.get("column_names")
+    if not isinstance(column_names, dict):
+        raise ValueError(
+            "CSV parser settings must contain a [column_names] table."
+        )
+
+    expected_fields = DEFAULT_CSV_PARSER_SETTINGS.__dataclass_fields__
+    missing_fields = expected_fields.keys() - column_names.keys()
+    if missing_fields:
+        raise ValueError(
+            f"CSV parser settings are missing keys: {', '.join(sorted(missing_fields))}"
+        )
+    unknown_fields = column_names.keys() - expected_fields.keys()
+    if unknown_fields:
+        raise ValueError(
+            f"CSV parser settings contain unknown keys: {', '.join(sorted(unknown_fields))}"
+        )
+    invalid_fields = [
+        name for name in expected_fields if not isinstance(column_names[name], str)
+    ]
+    if invalid_fields:
+        raise ValueError(
+            f"CSV parser settings must use strings for: {', '.join(invalid_fields)}"
+        )
+    return CSVParserSettings(**column_names)
 
 
 @dataclass
@@ -58,7 +137,36 @@ def _add_unique(values: list, value) -> None:
         values.append(value)
 
 
-def parse_contacts(input_table: str | Path, skip_csv_lines: list[int] | None = None) -> list[ParentContact]:
+def _validate_csv_headers(
+    provided_headers: list[str], settings: CSVParserSettings
+) -> None:
+    expected_headers = list(vars(settings).values())
+    normalized_headers = [header.strip() for header in provided_headers]
+    expected_set = set(expected_headers)
+    provided_set = set(normalized_headers)
+    missing = sorted(expected_set - provided_set)
+    unexpected = sorted(provided_set - expected_set)
+    if missing or unexpected:
+        raise ValueError(
+            "CSV columns do not match the configured parser settings.\n"
+            f"Expected columns: {', '.join(expected_headers)}\n"
+            f"Provided columns: {', '.join(normalized_headers)}\n"
+            f"Missing columns: {', '.join(missing) or '(none)'}\n"
+            f"Unexpected columns: {', '.join(unexpected) or '(none)'}\n"
+            "Use --csv-parser-settings to select a different column mapping."
+        )
+
+
+def parse_contacts(
+    input_table: str | Path,
+    skip_csv_lines: list[int] | None = None,
+    csv_parser_settings: str | Path | CSVParserSettings | None = None,
+) -> list[ParentContact]:
+    settings = (
+        csv_parser_settings
+        if isinstance(csv_parser_settings, CSVParserSettings)
+        else load_csv_parser_settings(csv_parser_settings)
+    )
     skipped = set([1] if skip_csv_lines is None else skip_csv_lines)
     if any(line < 1 for line in skipped):
         raise ValueError("CSV line numbers to skip must be greater than zero")
@@ -70,30 +178,31 @@ def parse_contacts(input_table: str | Path, skip_csv_lines: list[int] | None = N
     reader = csv.DictReader(io.StringIO(content, newline=""))
     if not reader.fieldnames:
         raise ValueError("CSV file does not contain a header")
+    _validate_csv_headers(reader.fieldnames, settings)
 
     for row in reader:
         row = {(key or "").strip(): value for key, value in row.items() if key is not None}
-        child_name = clean_value(row.get("Vorname Kind"))
-        street = clean_value(row.get("Strasse"))
-        postal_code = clean_value(row.get("PLZ"))
-        city = clean_value(row.get("Ort"))
+        child_name = clean_value(row.get(settings.child_first_name))
+        street = clean_value(row.get(settings.street))
+        postal_code = clean_value(row.get(settings.postal_code))
+        city = clean_value(row.get(settings.city))
 
         for role, label, first_column, last_column, phone_column, email_column in (
             (
                 "Mama",
                 "mother",
-                "Vorname Mutter",
-                "Nachname Mutter",
-                "Mobil Mutter",
-                "Email Mutter",
+                settings.mother_first_name,
+                settings.mother_last_name,
+                settings.mother_mobile,
+                settings.mother_email,
             ),
             (
                 "Papa",
                 "father",
-                "Vorname Vater",
-                "Nachname Vater",
-                "Mobil Vater",
-                "Email Vater",
+                settings.father_first_name,
+                settings.father_last_name,
+                settings.father_mobile,
+                settings.father_email,
             ),
         ):
             first_name = clean_value(row.get(first_column))
@@ -120,7 +229,7 @@ def parse_contacts(input_table: str | Path, skip_csv_lines: list[int] | None = N
             _add_unique(contact.phones, ("CELL", phone))
             _add_unique(
                 contact.phones,
-                ("HOME", normalize_phone(row.get("Festnetz"))),
+                ("HOME", normalize_phone(row.get(settings.home_phone))),
             )
             _add_unique(contact.emails, email)
             if not any(contact.address):
@@ -249,10 +358,20 @@ def main() -> None:
         default=[1],
         help="1-based CSV document line numbers to skip (default: 1)",
     )
+    parser.add_argument(
+        "--csv-parser-settings",
+        default=str(DEFAULT_CSV_PARSER_SETTINGS_PATH),
+        help=(
+            "TOML file mapping contact fields to CSV column names "
+            f"(default: {DEFAULT_CSV_PARSER_SETTINGS_PATH.name})"
+        ),
+    )
     args = parser.parse_args()
 
     try:
-        contacts = parse_contacts(args.input_table, args.skip_csv_lines)
+        contacts = parse_contacts(
+            args.input_table, args.skip_csv_lines, args.csv_parser_settings
+        )
         write_vcards(contacts, args.output, args.single_file)
     except (OSError, ValueError, csv.Error) as error:
         parser.error(str(error))
