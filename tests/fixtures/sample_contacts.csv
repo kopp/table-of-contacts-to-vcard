@@ -1,0 +1,4 @@
+Sample data only; all names and contact details are fictional
+Vorname Kind,Nachname Kind,Geburtstag,Strasse,PLZ,Ort,Festnetz,Vorname Mutter,Nachname Mutter,Vorname Vater,Nachname Vater,Mobil Mutter,Mobil Vater,Email Mutter,Email Vater
+Kind Eins,Example,,Musterstraße 1,12345,Musterstadt,030/12345678,Erika,Mustermann,Max,Mustermann,0176/12345678,0151/23456789,erika@example.com,max@example.com
+Kind Zwei,Example,,Musterstraße 1,12345,Musterstadt,030/12345678,Erika,Mustermann,Max,Mustermann,0176/12345678,0151/23456789,erika@example.com,max@example.com

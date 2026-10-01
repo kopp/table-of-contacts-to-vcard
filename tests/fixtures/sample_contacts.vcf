@@ -1,0 +1,18 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Mustermann;Erika;Mama von Kind Eins und Kind Zwei;;
+FN:Erika Mama von Kind Eins und Kind Zwei Mustermann
+TEL;TYPE=CELL:+4917612345678
+TEL;TYPE=HOME:+493012345678
+EMAIL;TYPE=HOME:erika@example.com
+ADR;TYPE=HOME:;;Musterstraße 1;Musterstadt;;12345;Germany
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Mustermann;Max;Papa von Kind Eins und Kind Zwei;;
+FN:Max Papa von Kind Eins und Kind Zwei Mustermann
+TEL;TYPE=CELL:+4915123456789
+TEL;TYPE=HOME:+493012345678
+EMAIL;TYPE=HOME:max@example.com
+ADR;TYPE=HOME:;;Musterstraße 1;Musterstadt;;12345;Germany
+END:VCARD
